@@ -8,36 +8,17 @@ from transformers import AutoTokenizer, AutoModelForSequenceClassification
 
 # 1. KONFIGURASI HALAMAN
 st.set_page_config(
-    page_title="DDC Classifier System",
-    layout="centered",
+    page_title="DDC AI Classifier",
+    layout="centered", # Mengubah layout menjadi centered agar lebih fokus
     initial_sidebar_state="collapsed"
 )
 
-# Custom CSS untuk tampilan lebih bersih (Menghapus padding berlebih)
-st.markdown("""
-    <style>
-    .block-container {
-        padding-top: 2rem;
-        padding-bottom: 2rem;
-    }
-    h1 {
-        font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
-        font-weight: 700;
-        color: #0e1117;
-    }
-    .stAlert {
-        border-radius: 8px;
-    }
-    </style>
-""", unsafe_allow_html=True)
-
-
 # 2. FUNGSI LOAD MODEL
+# Pastikan folder model sudah sesuai dengan path ini
 MODEL_PATH = "./model_distilbert_final"
 
 @st.cache_resource
 def load_model_resources():
-    # Cek keberadaan folder model
     if not os.path.exists(MODEL_PATH):
         return None, None, "Model path not found"
         
@@ -48,27 +29,19 @@ def load_model_resources():
     except Exception as e:
         return None, None, str(e)
 
+# 3. HEADER
+st.title("DDC AI Classifier")
+st.write("Automated Dewey Decimal Classification using DistilBERT")
+st.divider()
 
-# 3. HEADER & JUDUL
-st.title("Automated Library Classification")
-st.markdown("""
-<div style='background-color: #f8f9fa; padding: 15px; border-radius: 5px; border-left: 5px solid #2196F3; margin-bottom: 25px;'>
-    <small style='color: #666;'>SYSTEM DESCRIPTION</small><br>
-    This system utilizes <b>DistilBERT architecture</b> to predict the Dewey Decimal Classification (DDC) 
-    based on English book titles and descriptions.
-</div>
-""", unsafe_allow_html=True)
-
-
-# 4. LOAD MODEL (Background)
-with st.spinner("Initializing neural network model..."):
-    tokenizer, model, error_msg = load_model_resources()
+# 4. INIT MODEL
+tokenizer, model, error_msg = load_model_resources()
 
 if error_msg:
-    st.error(f"System Error: Failed to load model resources. {error_msg}")
+    st.error(f"System Error: Failed to load model. {error_msg}")
     st.stop()
 
-# CONSTANTS
+# 5. DATA LABEL DDC
 DDC_LABELS = {
     0: "000 - Generalities & Computer Science",
     1: "100 - Philosophy & Psychology",
@@ -82,112 +55,137 @@ DDC_LABELS = {
     9: "900 - History & Geography"
 }
 
-# INPUT FORM (Clean Interface)
-with st.container(border=True):
-    st.subheader("Input Book Data")
+DDC_DESCRIPTIONS = {
+    0: "Computer science, information systems, encyclopedias, and general reference works",
+    1: "Philosophical theories, psychology, ethics, and human behavior studies",
+    2: "Religious texts, theology, comparative religion, and spiritual practices",
+    3: "Sociology, economics, political science, law, education, and social issues",
+    4: "Linguistics, grammar, dictionaries, and language learning materials",
+    5: "Mathematics, astronomy, physics, chemistry, biology, and earth sciences",
+    6: "Medicine, engineering, agriculture, manufacturing, and applied sciences",
+    7: "Fine arts, music, performing arts, sports, games, and recreational activities",
+    8: "Poetry, novels, literary criticism, and works of fiction and prose",
+    9: "World history, biography, geography, and area studies"
+}
+
+# 6. TABS NAVIGASI
+tab1, tab2 = st.tabs(["Classification", "About DDC"])
+
+# ==================== TAB 1: CLASSIFICATION ====================
+with tab1:
+    st.write("Input the book details below to classify.")
     
     with st.form("classification_form"):
-        title_input = st.text_input("Book Title", placeholder="Enter the exact title of the book")
-        desc_input = st.text_area("Description / Abstract", placeholder="Paste the book description here...", height=120)
+        title_input = st.text_input("Book Title")
+        desc_input = st.text_area("Description / Abstract", height=150)
         
-        # Tombol Submit full width
-        submit_btn = st.form_submit_button("Run Classification", type="primary", use_container_width=True)
+        submit_btn = st.form_submit_button("Classify Text", type="primary")
 
-
-#  LOGIKA PREDIKSI & HASIL
-if submit_btn:
-    if not title_input or not desc_input:
-        st.warning("Please provide both Title and Description to proceed.")
-    else:
-        # Progress bar visual untuk UX
-        progress_text = "Analyzing semantic patterns..."
-        my_bar = st.progress(0, text=progress_text)
-
-        try:
-            # Simulasi progress (cepat)
-            for percent_complete in range(0, 100, 20):
-                time.sleep(0.05)
-                my_bar.progress(percent_complete + 20, text=progress_text)
-
-            # --- PROSES INFERENSI ---
-            text_combined = f"{title_input} {title_input} {desc_input}"
-            inputs = tokenizer(text_combined, return_tensors="pt", truncation=True, max_length=256)
+    if submit_btn:
+        if not title_input or not desc_input:
+            st.warning("Please provide both book title and description.")
+        else:
+            # Proses Progress
+            progress_bar = st.progress(0, text="Processing...")
+            for percent_complete in range(100):
+                time.sleep(0.005)
+                progress_bar.progress(percent_complete + 1)
             
-            model.eval()
-            with torch.no_grad():
-                outputs = model(**inputs)
-            
-            # Kalkulasi Probabilitas
-            probs = torch.nn.functional.softmax(outputs.logits, dim=1)[0].numpy()
-            pred_idx = np.argmax(probs)
-            confidence_score = probs[pred_idx]
-            
-            # Selesai progress
-            my_bar.empty()
-
-            # --- TAMPILAN HASIL (DASHBOARD STYLE) ---
-            st.markdown("---")
-            st.subheader("Classification Results")
-
-            # Container Hasil Utama
-            with st.container(border=True):
-                col1, col2 = st.columns([3, 1])
+            # Inferensi
+            try:
+                text_combined = f"{title_input} {title_input} {desc_input}"
+                inputs = tokenizer(text_combined, return_tensors="pt", truncation=True, max_length=256)
                 
-                with col1:
-                    st.caption("PREDICTED DDC CLASS")
-                    # Menampilkan hasil dengan font besar
-                    st.markdown(f"<h2 style='margin-top: -10px; color: #1f77b4;'>{DDC_LABELS[pred_idx]}</h2>", unsafe_allow_html=True)
+                model.eval()
+                with torch.no_grad():
+                    outputs = model(**inputs)
+                
+                probs = torch.nn.functional.softmax(outputs.logits, dim=1)[0].numpy()
+                pred_idx = np.argmax(probs)
+                confidence_score = probs[pred_idx]
+                
+                progress_bar.empty()
+
+                # Tampilan Hasil
+                st.subheader("Result")
+                
+                # Container untuk hasil utama
+                with st.container(border=True):
+                    st.metric(
+                        label="Predicted Class", 
+                        value=DDC_LABELS[pred_idx]
+                    )
+                    st.write(DDC_DESCRIPTIONS[pred_idx])
                     
-                    # Analisis singkat
-                    st.info(f"The model has identified patterns matching **Class {pred_idx}00** with high confidence.")
+                    st.markdown("---")
+                    st.write(f"Confidence Score: **{confidence_score:.1%}**")
+                    
+                    if confidence_score > 0.8:
+                        st.success("High Confidence")
+                    elif confidence_score > 0.6:
+                        st.info("Good Confidence")
+                    else:
+                        st.warning("Low Confidence - Check input")
 
-                with col2:
-                    st.caption("CONFIDENCE SCORE")
-                    # Metric style
-                    st.metric(label="", value=f"{confidence_score:.1%}")
-                    # Progress bar untuk confidence
-                    st.progress(float(confidence_score))
-
-            # --- TAMPILAN CHART (CLEAN) ---
-            st.markdown("<br>", unsafe_allow_html=True)
-            st.subheader("Probability Distribution (Top 3)")
-            
-            # Data Processing untuk Chart
-            top3_indices = np.argsort(probs)[-3:][::-1]
-            
-            chart_data = []
-            for i in top3_indices:
-                chart_data.append({
-                    "Category": str(i*100), # Hanya ambil angka ratusan (000, 100) agar grafik rapi
-                    "Probability": probs[i],
-                    "Full Label": DDC_LABELS[i]
+                # Grafik Probabilitas
+                st.subheader("Probability Distribution")
+                
+                top5_indices = np.argsort(probs)[-5:][::-1]
+                chart_data = pd.DataFrame({
+                    "Class": [f"{i}00" for i in top5_indices],
+                    "Probability": [probs[i] for i in top5_indices]
                 })
-            
-            df_chart = pd.DataFrame(chart_data)
+                
+                st.bar_chart(chart_data.set_index("Class"))
+                
+                # Tabel Data
+                with st.expander("View Detailed Statistics"):
+                    st.table(chart_data)
 
-            # Menggunakan column config untuk tampilan tabel yang lebih pro
-            col_chart, col_table = st.columns([2, 1])
+            except Exception as e:
+                st.error(f"Error during classification: {str(e)}")
 
-            with col_chart:
-                 st.bar_chart(
-                    df_chart, 
-                    x="Category", 
-                    y="Probability",
-                    color="#2196F3",
-                    height=250
-                )
+    # Daftar Kategori (Disederhanakan dalam Expander)
+    st.markdown("<br>", unsafe_allow_html=True)
+    with st.expander("Reference: DDC Main Classes"):
+        for code, text in DDC_LABELS.items():
+            st.text(f"{text}")
 
-            with col_table:
-                st.caption("Detailed Breakdown")
-                # Menampilkan tabel mini tanpa index
-                st.table(df_chart[["Category", "Probability"]].assign(Probability=lambda x: x['Probability'].map('{:.2%}'.format)))
+# ==================== TAB 2: ABOUT ====================
+with tab2:
+    st.subheader("Dewey Decimal Classification")
+    st.write("""
+    The Dewey Decimal Classification (DDC) system organizes knowledge into ten main classes. 
+    This system uses a DistilBERT model trained on library records to predict the correct category based on book titles and descriptions.
+    """)
+    
+    st.subheader("The Ten Main Classes")
+    
+    # Menggunakan dataframe sederhana untuk menampilkan list agar rapi
+    data_classes = {
+        "Code": ["000", "100", "200", "300", "400", "500", "600", "700", "800", "900"],
+        "Category": [
+            "Computer science, information & general works",
+            "Philosophy & psychology",
+            "Religion",
+            "Social sciences",
+            "Language",
+            "Science",
+            "Technology",
+            "Arts & recreation",
+            "Literature",
+            "History & geography"
+        ]
+    }
+    st.table(pd.DataFrame(data_classes))
+    
+    st.subheader("Model Information")
+    st.write("""
+    - **Model Architecture:** DistilBERT
+    - **Input:** Title + Description
+    - **Output:** DDC Main Class (000-900)
+    """)
 
-        except Exception as e:
-            st.error(f"An error occurred during classification: {str(e)}")
-
-# FOOTER
-st.markdown("""
-    <div style='text-align: center; margin-top: 50px; color: #888; font-size: 12px;'>
-        &copy; 2025 AI Library Systems. Powered by DistilBERT Transformer Model.
-    </div>
-""", unsafe_allow_html=True)
+# FOOTER SIMPLE
+st.markdown("---")
+st.caption("DDC AI Classifier System")
